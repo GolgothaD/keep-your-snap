@@ -1,0 +1,14 @@
+const K=require('../logic.js');let n=0;const ok=(c,m)=>{if(!c){console.error('FAIL',m);process.exitCode=1}else n++};
+ok(K.screen({age:'18-64'}).applies===true,'applies');ok(K.screen({age:'18-64',pregnant:'yes'}).applies===false,'pregnant');ok(K.screen({}).applies===null,'blank');
+ok(K.monthTotal([{date:'2026-10-01',hours:5},{date:'2026-09-30',hours:9}],'2026-10')===5,'monthTotal');ok(K.pace(30,2026,10,27).behind,'behind');
+ok(K.ics([{id:'a',title:'x',date:'2026-12-31'}]).includes('DTEND;VALUE=DATE:20270101'),'ics');
+ok(K.srLimit(1)===1729&&K.srLimit(4)===3575&&K.srLimit(10)===6037+2*616,'srLimit');
+ok(K.incomeCheck(1,1800).over&&K.incomeCheck(1,1600).near&&!K.incomeCheck(2,1000).near,'income');
+ok(K.reportBy('address','2026-10-20','cr').date==='2026-10-30'&&K.reportBy('address','2026-10-20','cr').required,'cr 10d');
+ok(K.reportBy('address','2026-10-20','sr').required===false,'sr address');
+ok(K.reportBy('pay','2026-10-20','sr',true).date==='2026-11-10','sr over -> nov10');ok(!K.reportBy('pay','2026-10-20','sr',false).required,'sr under');
+ok(K.reportBy('hours80','2026-12-15','sr').date==='2027-01-11','jan10 is Sunday -> Mon 11');
+ok(K.nextBusiness('2026-10-10')==='2026-10-12','Sat10 -> Mon12');ok(K.nextBusiness('2026-11-26')==='2026-11-30','Thanksgiving+Fri -> Mon');
+const m=K.merge({logs:[],rem:[{title:'a',date:'2026-11-01'}],changes:[{id:'c1',reported:false}]},{logs:[],rem:[{title:'a',date:'2026-11-01',done:true}],changes:[{id:'c1',reported:true,conf:'X9'},{id:'c2'}]});
+ok(m.changes.length===2&&m.changes[0].reported&&m.changes[0].conf==='X9'&&m.rem[0].done,'merge changes');
+console.log(n+' logic tests passed');

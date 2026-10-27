@@ -37,7 +37,33 @@ function ics(rem,now){
 function daysUntil(date,today){return Math.round((new Date(date+'T12:00:00')-new Date(today+'T12:00:00'))/864e5);}
 function merge(a,b){const k=l=>[l.date,l.type,l.hours,l.place||''].join('|');const s=new Set(a.logs.map(k));
   const logs=a.logs.concat(b.logs.filter(l=>!s.has(k(l))));const rk=r=>r.title+'|'+r.date;const rs=new Set(a.rem.map(rk));
-  return Object.assign({},a,{logs,rem:a.rem.concat(b.rem.filter(r=>!rs.has(rk(r))))});}
-const api={GOAL,screen,monthTotal,pace,ics,daysUntil,merge};
+  const ci=new Set((a.changes||[]).map(c=>c.id));const changes=(a.changes||[]).map(c=>{const o=(b.changes||[]).find(x=>x.id===c.id);return o&&o.reported&&!c.reported?Object.assign({},c,{reported:true,conf:o.conf,reportedOn:o.reportedOn}):c}).concat((b.changes||[]).filter(c=>!ci.has(c.id)));
+  return Object.assign({},a,{logs,changes,rem:a.rem.map(r=>{const o=b.rem.find(x=>rk(x)===rk(r));return o&&o.done?Object.assign({},r,{done:true}):r}).concat(b.rem.filter(r=>!rs.has(rk(r))))});}
+
+// RFT 250 (eff. 10-1-2026) column E: simplified reporting income limit, gross monthly
+const SR_LIMIT=[0,1729,2345,2960,3575,4191,4806,5421,6037],SR_ADD=616;
+function srLimit(n){n=Math.max(1,Math.floor(+n||1));return n<=8?SR_LIMIT[n]:SR_LIMIT[8]+(n-8)*SR_ADD;}
+function incomeCheck(size,gross){const lim=srLimit(size),g=+gross||0;return{limit:lim,gross:g,over:g>lim,near:g>lim*0.9&&g<=lim,left:lim-g};}
+// mode: 'd10' = 10 days after; 'm10' = 10th of next month (next business day); 'none' = not required
+const CHANGES={
+ address:{label:'New address',icon:'🏠',cr:['d10','Must report within 10 days of knowing (BAM 105).'],sr:['none','Not required for simplified reporters, but report it anyway so MDHHS letters (renewals, interviews) reach you.'],proof:'Lease or rent receipt, a letter or bill with your new address, new rent and utility amounts.'},
+ pay:{label:'Change in pay or hours',icon:'💵',cr:['d10','Must report a change in pay rate, or hours changing by more than 5 a week for over a month, within 10 days of the first paycheck showing it (BAM 105).'],sr:['inc','Only if your household\'s total gross income for the month goes over your limit. Then report by the 10th of the next month (BAM 200).'],proof:'Pay stubs for the last 30 days, or a letter from your employer with pay rate and hours.'},
+ newjob:{label:'Started a new job',icon:'🆕',cr:['d10','Must report within 10 days of your first paycheck (BAM 105).'],sr:['inc','Only if the month\'s total gross income goes over your limit. Then report by the 10th of the next month (BAM 200).'],proof:'First pay stubs, employer name, address and phone, start date, hourly pay and hours.'},
+ lostjob:{label:'Lost or quit a job',icon:'📉',cr:['d10','Must report stopping work within 10 days (BAM 105). Reporting it can raise your benefits.'],sr:['none','Not required, but reporting lost income can raise your benefits. If the 80-hour rule applies to you and you drop under 80 hours, see "Work hours under 80".'],proof:'Last pay stub, separation or layoff letter, last day worked. Quitting without good cause can affect SNAP, so explain why.'},
+ member:{label:'Someone moved in or out',icon:'👥',cr:['d10','Must report changes in who lives with you within 10 days of knowing (BAM 105).'],sr:['none','Not required for simplified reporters unless income goes over the limit, but adding someone can raise benefits.'],proof:'New member: ID, Social Security number, birth date, their income. Someone leaving: their new address if known.'},
+ housing:{label:'Rent, mortgage or utility costs changed',icon:'🔌',cr:['none','For SNAP, a cost change without moving is not required to report (BAM 105). Reporting a higher cost can raise your benefits.'],sr:['none','Not required. Reporting a higher cost can raise your benefits.'],proof:'Lease, mortgage statement, utility bills or shutoff notice.'},
+ support:{label:'Child support changed',icon:'👶',cr:['d10','Child support you RECEIVE: report starting or stopping it, or a change of more than $150 a month, within 10 days of the first changed payment. Child support you PAY is not required for SNAP but can lower your countable income (BAM 105).'],sr:['inc','Only if the month\'s total gross income goes over your limit (BAM 200). Reporting support you pay can raise benefits.'],proof:'Court order and MiSDU payment history.'},
+ hours80:{label:'Work hours under 80 this month',icon:'⏱️',cr:['m10','If the 80-hour work rule applies to you, report any month you don\'t meet it (BAM 105).'],sr:['m10','Report by the 10th of the next month if you work under 20 hours a week / 80 a month and the work rule applies to you (BAM 200).'],proof:'Pay stubs, volunteer sign-off sheets, a good-cause reason (illness, emergency) with any proof.'},
+ lottery:{label:'Lottery or gambling win of $4,750+',icon:'🎰',cr:['d10','Must report within 10 days (BAM 105, assets/income).'],sr:['m10','Report by the 10th of the next month (BAM 200).'],proof:'Winnings statement or W-2G.'}};
+const p2=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+function holidays(y){const nth=(m,wd,n)=>{const d=new Date(y,m,1);d.setDate(1+((wd-d.getDay()+7)%7)+(n-1)*7);return ymd(d)},last=(m,wd)=>{const d=new Date(y,m+1,0);d.setDate(d.getDate()-((d.getDay()-wd+7)%7));return ymd(d)};
+ return[ y+'-01-01',nth(0,1,3),nth(1,1,3),last(4,1),y+'-06-19',y+'-07-04',nth(8,1,1),y+'-11-11',nth(10,4,4),(()=>{const t=new Date(nth(10,4,4)+'T12:00:00');t.setDate(t.getDate()+1);return ymd(t)})(),y+'-12-24',y+'-12-25',y+'-12-31'];} // Michigan state government holidays (approx.; observed-day shifts not handled)
+function nextBusiness(s){const d=new Date(s+'T12:00:00');for(;;){const k=ymd(d),h=holidays(d.getFullYear());const wd=d.getDay();if(wd&&wd<6&&!h.includes(k))return k;d.setDate(d.getDate()+1);}}
+function reportBy(kind,date,reporter,overLimit){const c=CHANGES[kind];if(!c)return null;const [mode,why]=reporter==='sr'?c.sr:c.cr;
+ const d=new Date(date+'T12:00:00');let m=mode;if(m==='inc')m=overLimit?'m10':'none';
+ if(m==='none'){const x=new Date(d);x.setDate(x.getDate()+10);return{required:false,date:ymd(x),why};}
+ if(m==='d10'){d.setDate(d.getDate()+10);return{required:true,date:ymd(d),why};}
+ return{required:true,date:nextBusiness(ymd(new Date(d.getFullYear(),d.getMonth()+1,10))),why};}
+const api={GOAL,screen,monthTotal,pace,ics,daysUntil,merge,srLimit,incomeCheck,CHANGES,reportBy,nextBusiness};
 if(typeof module!=='undefined')module.exports=api;else g.KYS=api;
 })(this);
