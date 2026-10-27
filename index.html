@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🍎%3C/text%3E%3C/svg%3E"><title>Keep Your SNAP</title><meta name="description" content="Free tool: check the SNAP work rule, log your 80 hours, and never miss a renewal. Your data stays on your device.">
+<style>
+:root{--bg:#fff8ef;--card:#fff;--ink:#2b2118;--muted:#5e4b3c;--acc:#b5470b;--acc2:#2f6b3a;--warn:#8a1c1c;--line:#e8d6c2}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:19px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--acc);color:#fff;padding:14px 16px}header h1{margin:0;font-size:1.5rem}header p{margin:2px 0 0;font-size:1rem}
+nav{display:flex;overflow-x:auto;gap:4px;background:#fbe9d6;padding:6px;position:sticky;top:0;z-index:5;border-bottom:1px solid var(--line)}
+nav button{flex:1 0 auto;font:inherit;font-size:1rem;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:var(--ink);min-height:48px;cursor:pointer}
+nav button[aria-selected=true]{background:var(--acc);color:#fff;font-weight:700}
+main{max-width:720px;margin:auto;padding:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 2px 6px #0000000d}
+h2{font-size:1.3rem;margin:0 0 8px}h3{font-size:1.1rem;margin:12px 0 6px}label{display:block;font-weight:600;margin:12px 0 4px}
+input,select,textarea{font:inherit;width:100%;padding:10px;border:2px solid #c9b29b;border-radius:10px;min-height:48px;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus{outline:3px solid #f0a35e;outline-offset:2px}
+fieldset{border:0;padding:0;margin:14px 0}legend{font-weight:600;margin-bottom:6px}.opts{display:flex;gap:8px;flex-wrap:wrap}
+.opts label{font-weight:400;margin:0;display:flex;align-items:center;gap:6px;border:2px solid #c9b29b;border-radius:10px;padding:8px 14px;min-height:48px;cursor:pointer}
+.opts input{width:auto;min-height:auto}.btn{font:inherit;font-weight:700;background:var(--acc);color:#fff;border:0;border-radius:12px;padding:12px 18px;min-height:52px;margin:10px 6px 0 0;cursor:pointer}
+.btn.g{background:var(--acc2)}.btn.s{background:#fff;color:var(--acc);border:2px solid var(--acc)}.muted{color:var(--muted);font-size:.95rem}
+.bar{height:28px;background:#f1e1cf;border-radius:14px;overflow:hidden}.bar>div{height:100%;background:var(--acc2);transition:width .4s}
+.alert{border-left:6px solid var(--warn);background:#fdecec;padding:12px;border-radius:10px;margin:10px 0}.ok{border-left-color:var(--acc2);background:#e9f5ea}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:8px 0}.row button{font:inherit;background:none;border:0;color:var(--warn);min-height:44px;cursor:pointer}
+.big{font-size:2rem;font-weight:800}a{color:#8f3500}footer{text-align:center;padding:20px;font-size:.9rem;color:var(--muted)}
+.hidden{display:none}#qr svg{width:100%;height:auto}
+</style></head><body>
+<header><h1>🍎 Keep Your SNAP</h1><p>Check the work rule. Log your hours. Don't miss a deadline.</p></header>
+<nav role="tablist" aria-label="Sections"><button role="tab" data-t="check">✅ Check</button><button role="tab" data-t="hours">⏱️ Hours</button><button role="tab" data-t="dates">📅 Dates</button><button role="tab" data-t="sync">🔄 Sync</button><button role="tab" data-t="about">ℹ️ Sources</button></nav>
+<main id="app" aria-live="polite"></main>
+<footer>Free, no ads, no tracking. Everything stays on this device. Not affiliated with USDA or MDHHS. Not legal advice.</footer>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script><script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script><script src="logic.js"></script>
+<script>
+const SRC={fns:'https://www.fns.usda.gov/snap/work-requirements',mi:'https://www.michigan.gov/mdhhs/assistance-programs/food/learn-more/work-requirements',bem:'https://mdhhs-pres-prod.michigan.gov/olmweb/EXF/BP/Public/BEM/620.pdf',naco:'https://www.naco.org/news/usda-issues-guidance-snap-abawd-work-requirement-changes-under-hr-1',bridges:'https://newmibridges.michigan.gov/',report:'https://www.michigan.gov/mdhhs/assistance-programs/food',office:'https://www.michigan.gov/mdhhs/inside-mdhhs/county-offices'};
+const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+let S;try{S=JSON.parse(localStorage.getItem('kys'))}catch(e){}S=Object.assign({logs:[],rem:[],ans:{},notify:false,tab:'check'},S||{});
+const save=()=>localStorage.setItem('kys',JSON.stringify(S));
+const uid=()=>Math.random().toString(36).slice(2,10);
+const Q=[['age','How old are you?',[['under18','Under 18'],['18-64','18 to 64'],['65plus','65 or older']]],
+['child14','Is anyone under age 14 in your SNAP household?'],['pregnant','Are you pregnant?'],
+['unfit','Are you physically or mentally unable to work? (This includes getting disability benefits like SSI, SSDI, VA disability, or workers\' comp.)'],
+['caregiver','Do you care for a child under 6, or for someone who can\'t care for themselves?'],
+['student','Are you in school or job training at least half-time?'],['treatment','Are you in a drug or alcohol treatment program?'],
+['ui','Do you get unemployment benefits, or have you applied for them?'],['work30','Do you already work 30 or more hours a week?'],
+['tribe','Are you American Indian or Alaska Native (for example, a member of a tribe)?'],
+['place','Where in Michigan do you live?',[['excluded','Alcona, Cheboygan, Mackinac, Ogemaw, Oscoda, Presque Isle or Schoolcraft County, or the city of Detroit, Eastpointe, Flint, Jackson or Saginaw (list in effect Nov 1, 2026)'],['other','Anywhere else in Michigan'],['notmi','Not in Michigan']]]];
+const T={
+check(){const a=S.ans;return `<div class="card"><h2>Does the SNAP work rule apply to me?</h2><p>Answer what you can. This takes about a minute. In 2025 the rule changed, so check again even if you were exempt before.</p>
+<form id="scr">${Q.map(([k,q,o])=>`<fieldset><legend>${h(q)}</legend><div class="opts">${(o||[['yes','Yes'],['no','No']]).map(([v,l])=>`<label><input type="radio" name="${k}" value="${v}" ${a[k]===v?'checked':''}> ${h(l)}</label>`).join('')}</div></fieldset>`).join('')}
+<button class="btn" type="submit">See my result</button> <button class="btn s" type="button" onclick="S.ans={};save();go()">Start over</button></form></div><div id="res">${a._done?result():''}</div>`;},
+hours(){const mk=(S.mon||today().slice(0,7));const [y,m]=mk.split('-').map(Number);const tot=KYS.monthTotal(S.logs,mk);const isNow=mk===today().slice(0,7);
+const p=KYS.pace(tot,y,m,isNow?new Date().getDate():new Date(y,m,0).getDate());const list=S.logs.filter(l=>l.date.startsWith(mk)).sort((a,b)=>b.date.localeCompare(a.date));
+const by=t=>list.filter(l=>l.type===t).reduce((s,l)=>s+ +l.hours,0);
+return `<div class="card"><h2>My hours</h2><label for="mon">Month</label><input type="month" id="mon" value="${h(mk)}" onchange="S.mon=this.value;save();go()">
+<p class="big" id="tot">${+tot.toFixed(2)} / 80 hours</p><div class="bar" role="progressbar" aria-label="Hours toward 80" aria-valuemin="0" aria-valuemax="80" aria-valuenow="${+tot.toFixed(2)}"><div style="width:${p.pct}%"></div></div>
+<p class="muted">Work ${by('work')} · Volunteer ${by('volunteer')} · Training ${by('training')}</p>
+${tot>=80?`<div class="alert ok">🎉 You reached 80 hours this month. Keep your pay stubs or volunteer sign-off sheets as proof.</div>`:isNow&&p.behind?`<div class="alert" id="behind">⚠️ You're behind pace. By today you'd want about ${Math.ceil(p.expected)} hours. You need about ${p.needPerDay.toFixed(1)} hours a day for the rest of the month, or about ${Math.ceil(80-tot)} hours total.</div>`:isNow?`<div class="alert ok">👍 You're on pace. ${+(80-tot).toFixed(2)} hours to go.</div>`:`<div class="alert">This month ended with ${+tot.toFixed(2)} of 80 hours.</div>`}</div>
+<div class="card"><h2>Add hours</h2><form id="addh"><label for="hd">Date</label><input type="date" id="hd" value="${today()}" required>
+<label for="ht">Type</label><select id="ht"><option value="work">Work (paid, self-employed, or for goods)</option><option value="volunteer">Volunteering</option><option value="training">Job training / work program</option></select>
+<label for="hh">Hours</label><input type="number" id="hh" min="0.25" max="24" step="0.25" inputmode="decimal" required>
+<label for="hp">Where (optional)</label><input id="hp" maxlength="80" placeholder="Job, food bank, Michigan Works!..."><button class="btn g" type="submit">Add hours</button></form></div>
+<div class="card"><h2>This month's log</h2>${list.length?list.map(l=>`<div class="row"><span><b>${h(l.date)}</b> · ${h(l.hours)} h · ${h(l.type)}${l.place?' · '+h(l.place):''}</span><button aria-label="Delete entry" onclick="delLog('${h(l.id)}')">✕</button></div>`).join(''):'<p class="muted">No hours yet.</p>'}
+<button class="btn s" onclick="print()">🖨️ Print this month</button></div>`;},
+dates(){const t=today();const r=S.rem.slice().sort((a,b)=>a.date.localeCompare(b.date));
+return `${alerts()}<div class="card"><h2>My deadlines</h2><p>Your renewal (redetermination) date and your semi-annual report due date are on letters from MDHHS and in <a href="${SRC.bridges}" target="_blank" rel="noopener">MI Bridges</a>. Missing them is the most common way people lose SNAP.</p>
+<form id="addr"><label for="rk">What is due</label><select id="rk"><option>Renewal (redetermination) due</option><option>Semi-annual report due</option><option>MDHHS interview</option><option>Send proof / documents</option><option>Other</option></select>
+<label for="rn">Note (optional)</label><input id="rn" maxlength="80"><label for="rd">Due date</label><input type="date" id="rd" required><button class="btn g" type="submit">Add reminder</button></form></div>
+<div class="card"><h2>Upcoming</h2>${r.length?r.map(x=>{const d=KYS.daysUntil(x.date,t);return `<div class="row"><span><b>${h(x.title)}</b><br>${h(x.date)} · ${d<0?'passed':d===0?'TODAY':d+' days'}</span><button aria-label="Delete reminder" onclick="delRem('${h(x.id)}')">✕</button></div>`}).join(''):'<p class="muted">No dates yet.</p>'}
+<button class="btn" id="icsb" onclick="dlIcs()">📅 Add to my calendar (.ics)</button>
+<button class="btn s" onclick="askNotify()">🔔 ${S.notify?'Notifications on':'Turn on notifications'}</button>
+<p class="muted">Calendar file includes alerts 7 days and 1 day before. Browser notifications only show when you open this app; the calendar file works even when it's closed.</p></div>`;},
+sync(){const link=syncLink();let qr='';try{const q=qrcode(0,'L');q.addData(link);q.make();qr=q.createSvgTag({cellSize:3,margin:2,scalable:true});}catch(e){qr='<p class="muted">Too much data for a QR code. Use the link or a backup file.</p>';}
+return `<div class="card"><h2>Sync to another device</h2><p>Scan this with your other phone's camera, or copy the link and open it there. You'll be asked to merge or replace.</p>
+<div id="qr" style="background:#fff;padding:6px;max-width:280px;margin:8px auto">${qr}</div><label for="sl">Sync link</label><input id="sl" readonly value="${h(link)}" onclick="this.select()">
+<button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('sl').value).then(()=>alert('Copied'))">Copy link</button>
+<label for="si">Paste a sync link from another device</label><input id="si"><button class="btn g" onclick="importCode(document.getElementById('si').value)">Import</button>
+<p class="muted">The link holds your data. Only open it on your own devices.</p></div>
+<div class="card"><h2>Backup file</h2><button class="btn" id="bk" onclick="backup()">⬇️ Download backup</button><label class="btn s" style="display:inline-block">⬆️ Load backup<input type="file" accept=".json,application/json" class="hidden" onchange="loadBackup(this)"></label></div>`;},
+about(){return `<div class="card"><h2>What the rule says (2026)</h2><ul>
+<li>The 2025 federal law (H.R. 1) expanded the "able-bodied adult without dependents" (ABAWD) rule to ages <b>18–64</b> and to parents whose kids are all <b>14 or older</b>.</li>
+<li>It ended the exemptions for <b>veterans, people experiencing homelessness, and former foster youth</b>.</li>
+<li>If the rule applies, you need <b>80 hours a month</b> of work (paid, in-kind, or volunteer), an approved work program like Michigan Works!, or a mix. Otherwise SNAP is limited to <b>3 months in 36</b>. Michigan's current 36-month period is Jan 1, 2025 – Dec 31, 2027.</li>
+<li>Michigan calls it Time Limited Food Assistance (TLFA). Some areas are excluded (list effective Nov 1, 2026 in BEM 620).</li>
+<li>Good cause (like illness or a family emergency) may count. Ask your MDHHS worker.</li></ul>
+<h3>Official sources</h3><ul>
+<li><a href="${SRC.bem}" target="_blank" rel="noopener">MDHHS Bridges Eligibility Manual BEM 620, Time Limited Food Assistance (BPB 2026-031, eff. 11-1-2026)</a></li>
+<li><a href="${SRC.mi}" target="_blank" rel="noopener">MDHHS: Work Requirements for Food Assistance</a></li>
+<li><a href="${SRC.fns}" target="_blank" rel="noopener">USDA FNS: SNAP Work Requirements</a> (USDA says it is still updating this page for the 2025 law)</li>
+<li><a href="${SRC.naco}" target="_blank" rel="noopener">NACo summary of USDA guidance on H.R. 1 ABAWD changes</a></li>
+<li><a href="${SRC.bridges}" target="_blank" rel="noopener">MI Bridges</a> (renew, report, upload proof) · <a href="${SRC.office}" target="_blank" rel="noopener">Find your MDHHS office</a></li></ul>
+<p class="muted">Rules change. Always confirm with MDHHS. Free legal help: Michigan Legal Help, michiganlegalhelp.org.</p></div>
+<div class="card"><h2>Privacy</h2><p>No account, no server, no tracking. Your answers and hours are saved only in this browser. Clearing your browser data erases them, so download a backup now and then.</p>
+<button class="btn s" onclick="if(confirm('Erase everything on this device?')){localStorage.removeItem('kys');location.reload()}">Erase my data</button></div>`;}};
+function result(){const r=KYS.screen(S.ans);const src=`<p class="muted"><b>This is not legal advice.</b> Only MDHHS can decide. Read the official rules: <a href="${SRC.bem}" target="_blank" rel="noopener">MDHHS BEM 620</a>, <a href="${SRC.mi}" target="_blank" rel="noopener">MDHHS work requirements</a>, <a href="${SRC.fns}" target="_blank" rel="noopener">USDA FNS</a>.</p>`;
+if(r.applies===null)return `<div class="card alert" id="result">Please answer at least the age question.${src}</div>`;
+if(!r.applies)return `<div class="card alert ok" id="result"><h2>The 80-hour rule probably does <u>not</u> apply to you</h2><p>Because:</p><ul>${r.reasons.map(x=>`<li>${h(x)}</li>`).join('')}</ul><p>Make sure MDHHS knows about this. Tell your worker or report it in <a href="${SRC.bridges}" target="_blank" rel="noopener">MI Bridges</a>; you may need proof. The general work rules (like not quitting a job without good reason) may still apply.</p>${src}</div>`;
+return `<div class="card alert" id="result"><h2>The 80-hour rule probably <u>does</u> apply to you</h2><p>To keep SNAP past 3 months, get <b>80 hours every month</b> of work, volunteering, or an approved training program (or a mix). Being a veteran, homeless, or a former foster youth no longer exempts you under the 2025 law.</p>${S.ans.place==='notmi'?'<p>You are outside Michigan. Your state\'s rules and exempt areas may differ; check your state SNAP agency.</p>':''}<p>If something changes (pregnancy, a health problem, a child joins your household), tell MDHHS right away.</p><button class="btn g" onclick="tab('hours')">Start logging hours</button>${src}</div>`;}
+function alerts(){const t=today();return S.rem.map(x=>({x,d:KYS.daysUntil(x.date,t)})).filter(o=>o.d>=0&&o.d<=14).map(o=>`<div class="alert" role="alert">⏰ <b>${h(o.x.title)}</b> is due ${o.d===0?'<b>today</b>':'in '+o.d+' day'+(o.d>1?'s':'')} (${h(o.x.date)}). Turn it in on MI Bridges or at your MDHHS office.</div>`).join('');}
+function tab(t){S.tab=t;save();go();}
+function go(){document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===S.tab));const top=S.tab==='dates'?'':alerts();document.getElementById('app').innerHTML=top+T[S.tab]();bind();}
+function bind(){const f=document.getElementById('scr');if(f)f.onsubmit=e=>{e.preventDefault();const fd=new FormData(f);S.ans={_done:1};Q.forEach(([k])=>{if(fd.get(k))S.ans[k]=fd.get(k)});save();go();document.getElementById('result').scrollIntoView({behavior:'smooth'});};
+const a=document.getElementById('addh');if(a)a.onsubmit=e=>{e.preventDefault();const hrs=+document.getElementById('hh').value;if(!(hrs>0&&hrs<=24))return alert('Enter hours between 0.25 and 24.');const date=document.getElementById('hd').value;S.logs.push({id:uid(),date,type:document.getElementById('ht').value,hours:hrs,place:document.getElementById('hp').value.trim().slice(0,80)});S.mon=date.slice(0,7);save();go();};
+const r=document.getElementById('addr');if(r)r.onsubmit=e=>{e.preventDefault();const n=document.getElementById('rn').value.trim().slice(0,80);S.rem.push({id:uid(),title:document.getElementById('rk').value+(n?' – '+n:''),date:document.getElementById('rd').value});save();go();};}
+function delLog(id){if(confirm('Delete this entry?')){S.logs=S.logs.filter(l=>l.id!==id);save();go();}}
+function delRem(id){S.rem=S.rem.filter(l=>l.id!==id);save();go();}
+function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);}
+function dlIcs(){if(!S.rem.length)return alert('Add a date first.');dl('snap-deadlines.ics',KYS.ics(S.rem),'text/calendar');}
+function askNotify(){if(!('Notification' in window))return alert('This browser does not support notifications. Use the calendar file instead.');Notification.requestPermission().then(p=>{S.notify=p==='granted';save();go();if(S.notify)notifyDue(true);});}
+function notifyDue(force){if(!S.notify||!('Notification' in window)||Notification.permission!=='granted')return;const t=today();if(!force&&S.lastN===t)return;S.lastN=t;save();
+S.rem.forEach(x=>{const d=KYS.daysUntil(x.date,t);if([14,7,3,1,0].includes(d))try{new Notification('Keep Your SNAP',{body:x.title+(d?' due in '+d+' days':' due today')})}catch(e){}});}
+const payload=()=>JSON.stringify({v:1,logs:S.logs,rem:S.rem,ans:S.ans});
+function syncLink(){return location.origin+location.pathname+'#sync='+LZString.compressToEncodedURIComponent(payload());}
+function clean(d){if(!d||!Array.isArray(d.logs)||!Array.isArray(d.rem))throw 0;const okD=s=>/^\d{4}-\d{2}-\d{2}$/.test(s);
+return{logs:d.logs.filter(l=>l&&okD(l.date)&&+l.hours>0&&+l.hours<=24).map(l=>({id:String(l.id||uid()).slice(0,20),date:l.date,type:['work','volunteer','training'].includes(l.type)?l.type:'work',hours:+l.hours,place:String(l.place||'').slice(0,80)})),
+rem:d.rem.filter(r=>r&&okD(r.date)).map(r=>({id:String(r.id||uid()).slice(0,20),title:String(r.title||'Reminder').slice(0,120),date:r.date})),ans:d.ans&&typeof d.ans==='object'?d.ans:{}};}
+function applyData(d,from){let c;try{c=clean(d)}catch(e){return alert("That data didn't work.")}
+const m=document.createElement('div');m.setAttribute('role','dialog');m.style.cssText='position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:99;padding:16px';
+m.innerHTML=`<div class="card" style="max-width:480px"><h2>Import from ${h(from)}</h2><p>${c.logs.length} hour entries and ${c.rem.length} reminders found.</p><button class="btn g" id="mg">Merge with mine</button><button class="btn" id="rp">Replace mine</button><button class="btn s" id="cn">Cancel</button></div>`;
+document.body.appendChild(m);const done=()=>{m.remove();if(location.hash.startsWith('#sync='))history.replaceState(null,'',location.pathname);};
+m.querySelector('#mg').onclick=()=>{Object.assign(S,KYS.merge(S,c));if(!S.ans._done)S.ans=c.ans;save();done();go();};
+m.querySelector('#rp').onclick=()=>{Object.assign(S,c);save();done();go();};m.querySelector('#cn').onclick=done;}
+function importCode(c){c=(c||'').trim();if(c.includes('#sync='))c=c.split('#sync=')[1];let d;try{d=JSON.parse(LZString.decompressFromEncodedURIComponent(c))}catch(e){}if(!d)return alert("That sync link didn't work.");applyData(d,'another device');}
+function backup(){dl('keep-your-snap-backup-'+today()+'.json',payload(),'application/json');}
+function loadBackup(inp){const f=inp.files[0];if(!f)return;f.text().then(t=>{let d;try{d=JSON.parse(t)}catch(e){return alert("That file isn't a backup.")}applyData(d,'a backup file');inp.value='';});}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
+if(!T[S.tab])S.tab='check';go();notifyDue();
+if(location.hash.startsWith('#sync='))setTimeout(()=>importCode(location.hash),0);
+addEventListener('hashchange',()=>location.hash.startsWith('#sync=')&&importCode(location.hash));
+</script></body></html>
