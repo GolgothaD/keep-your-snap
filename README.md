@@ -11,6 +11,9 @@ A free tool for people at risk of losing SNAP (Michigan Food Assistance) over pa
 - **Upcoming deadlines** card at the top of every screen.
 - **Sync & backup:** QR code / link sync between your devices (merge or replace) and a JSON backup file.
 
+- **Works offline / no CDN:** QR and compression libraries are bundled in `vendor/`; installable PWA (manifest + service worker) so iPhone doesn't evict data; asks the browser for persistent storage; 30-day backup reminder.
+- **Sync deletions:** deleted items are tombstoned so merging never brings them back.
+
 All data stays in your browser's localStorage. No accounts, no backend, no tracking.
 
 ## Sources

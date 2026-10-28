@@ -1,6 +1,10 @@
 (function(g){
 const GOAL=80;
-function screen(a){ // returns {applies:bool|null, reasons:[]}
+const QKEYS=['age','child14','pregnant','unfit','caregiver','student','treatment','ui','work30','tribe','place'];
+function screen(a){ // returns {applies:bool|null, reasons:[], missing:[], unsure:[], cautious:bool}
+  a=a||{};const missing=QKEYS.filter(k=>!a[k]);
+  if(missing.length)return{applies:null,reasons:[],missing,unsure:[]}; // never infer from partial answers
+  const unsure=QKEYS.filter(k=>a[k]==='unsure');
   const r=[];
   if(a.age==='under18')r.push('You are under 18.');
   if(a.age==='65plus')r.push('You are 65 or older.');
@@ -14,9 +18,8 @@ function screen(a){ // returns {applies:bool|null, reasons:[]}
   if(a.work30==='yes')r.push('You already work 30+ hours a week (or earn at least 30 × federal minimum wage weekly).');
   if(a.tribe==='yes')r.push('You are American Indian or Alaska Native (tribal member or similar status).');
   if(a.place==='excluded')r.push('You live in a Michigan county or city where the time limit is not in effect right now.');
-  if(r.length)return{applies:false,reasons:r};
-  if(!a.age)return{applies:null,reasons:[]};
-  return{applies:true,reasons:[]};
+  if(r.length)return{applies:false,reasons:r,missing:[],unsure};
+  return{applies:true,reasons:[],missing:[],unsure,cautious:unsure.length>0};
 }
 function monthKey(d){return d.slice(0,7);}
 function monthTotal(logs,mk){return logs.filter(l=>monthKey(l.date)===mk).reduce((s,l)=>s+(+l.hours||0),0);}
@@ -35,7 +38,12 @@ function ics(rem,now){
   L.push('END:VCALENDAR');return L.join('\r\n')+'\r\n';
 }
 function daysUntil(date,today){return Math.round((new Date(date+'T12:00:00')-new Date(today+'T12:00:00'))/864e5);}
-function merge(a,b){const k=l=>[l.date,l.type,l.hours,l.place||''].join('|');const s=new Set(a.logs.map(k));
+// Tombstones: del = {id: deletedAtMs}. Merged across devices so deletions are never resurrected.
+function mergeDel(a,b){const o=Object.assign({},a||{});for(const k in (b||{}))o[k]=Math.max(+o[k]||0,+b[k]||0);return o;}
+function merge(a,b){const del=mergeDel(a.del,b.del),live=x=>!(x&&x.id&&del[x.id]);const m=merge0(a,b);
+  const changes=m.changes.filter(live),cids=new Set(changes.map(c=>c.id));
+  return Object.assign(m,{del,logs:m.logs.filter(live),changes,rem:m.rem.filter(r=>live(r)&&!(r.changeId&&del[r.changeId]&&!cids.has(r.changeId)))});}
+function merge0(a,b){const k=l=>[l.date,l.type,l.hours,l.place||''].join('|');const s=new Set(a.logs.map(k));
   const logs=a.logs.concat(b.logs.filter(l=>!s.has(k(l))));const rk=r=>r.title+'|'+r.date;const rs=new Set(a.rem.map(rk));
   const ci=new Set((a.changes||[]).map(c=>c.id));const changes=(a.changes||[]).map(c=>{const o=(b.changes||[]).find(x=>x.id===c.id);return o&&o.reported&&!c.reported?Object.assign({},c,{reported:true,conf:o.conf,reportedOn:o.reportedOn}):c}).concat((b.changes||[]).filter(c=>!ci.has(c.id)));
   return Object.assign({},a,{logs,changes,rem:a.rem.map(r=>{const o=b.rem.find(x=>rk(x)===rk(r));return o&&o.done?Object.assign({},r,{done:true}):r}).concat(b.rem.filter(r=>!rs.has(rk(r))))});}
@@ -57,13 +65,24 @@ const CHANGES={
  lottery:{label:'Lottery or gambling win of $4,750+',icon:'🎰',cr:['d10','Must report within 10 days (BAM 105, assets/income).'],sr:['m10','Report by the 10th of the next month (BAM 200).'],proof:'Winnings statement or W-2G.'}};
 const p2=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
 function holidays(y){const nth=(m,wd,n)=>{const d=new Date(y,m,1);d.setDate(1+((wd-d.getDay()+7)%7)+(n-1)*7);return ymd(d)},last=(m,wd)=>{const d=new Date(y,m+1,0);d.setDate(d.getDate()-((d.getDay()-wd+7)%7));return ymd(d)};
- return[ y+'-01-01',nth(0,1,3),nth(1,1,3),last(4,1),y+'-06-19',y+'-07-04',nth(8,1,1),y+'-11-11',nth(10,4,4),(()=>{const t=new Date(nth(10,4,4)+'T12:00:00');t.setDate(t.getDate()+1);return ymd(t)})(),y+'-12-24',y+'-12-25',y+'-12-31'];} // Michigan state government holidays (approx.; observed-day shifts not handled)
+ const obs=s=>{const d=new Date(s+'T12:00:00'),w=d.getDay();if(w===6)d.setDate(d.getDate()-1);else if(w===0)d.setDate(d.getDate()+1);return ymd(d)}; // Sat->Fri, Sun->Mon
+ return[ obs(y+'-01-01'),obs((y+1)+'-01-01'),nth(0,1,3),nth(1,1,3),last(4,1),obs(y+'-06-19'),obs(y+'-07-04'),nth(8,1,1),obs(y+'-11-11'),nth(10,4,4),(()=>{const t=new Date(nth(10,4,4)+'T12:00:00');t.setDate(t.getDate()+1);return ymd(t)})(),obs(y+'-12-24'),obs(y+'-12-25'),obs(y+'-12-31')];} // Michigan state government holidays (approx.); weekend dates move to observed day
 function nextBusiness(s){const d=new Date(s+'T12:00:00');for(;;){const k=ymd(d),h=holidays(d.getFullYear());const wd=d.getDay();if(wd&&wd<6&&!h.includes(k))return k;d.setDate(d.getDate()+1);}}
+// date = the trigger date: for pay/newjob/support that is the FIRST PAYCHECK (or payment) with the new amount (BAM 105).
+// overLimit: true/false, or null/undefined when income is unknown -> {required:null, unknown:true} (never "not required").
 function reportBy(kind,date,reporter,overLimit){const c=CHANGES[kind];if(!c)return null;const [mode,why]=reporter==='sr'?c.sr:c.cr;
- const d=new Date(date+'T12:00:00');let m=mode;if(m==='inc')m=overLimit?'m10':'none';
+ const d=new Date(date+'T12:00:00');let m=mode;
+ if(m==='inc'){if(overLimit==null)return{required:null,unknown:true,date:nextBusiness(ymd(new Date(d.getFullYear(),d.getMonth()+1,10))),why};m=overLimit?'m10':'none';}
  if(m==='none'){const x=new Date(d);x.setDate(x.getDate()+10);return{required:false,date:ymd(x),why};}
  if(m==='d10'){d.setDate(d.getDate()+10);return{required:true,date:ymd(d),why};}
  return{required:true,date:nextBusiness(ymd(new Date(d.getFullYear(),d.getMonth()+1,10))),why};}
-const api={GOAL,screen,monthTotal,pace,ics,daysUntil,merge,srLimit,incomeCheck,CHANGES,reportBy,nextBusiness};
+const TRIGGER={pay:'Date of your first paycheck with the new pay',newjob:'Date of your first paycheck from the new job',support:'Date of the first changed child support payment'};
+function triggerLabel(k){return TRIGGER[k]||'Date it happened';}
+// Month under 80 hours -> report by the 10th of next month (BAM 200 / BAM 105). Deterministic id for dedupe.
+function under80Reminder(mk){const [y,m]=mk.split('-').map(Number);return{id:'h80-'+mk,title:'Report: under 80 work hours in '+new Date(y,m-1,15).toLocaleString('en-US',{month:'long',year:'numeric'}),date:nextBusiness(ymd(new Date(y,m,10))),kind:'hours80',month:mk};}
+function under80Months(logs,todayStr){const cur=todayStr.slice(0,7);const ms=[...new Set(logs.map(l=>monthKey(l.date)))].filter(mk=>mk<cur);return ms.filter(mk=>monthTotal(logs,mk)<GOAL).sort();}
+const RULES_CHECKED='2026-10-27';
+function limitsStale(todayStr){const y=+RULES_CHECKED.slice(0,4),next=(+RULES_CHECKED.slice(5,7)>=10?y+1:y)+'-10-01';return todayStr>=next;}
+const api={QKEYS,mergeDel,triggerLabel,under80Reminder,under80Months,RULES_CHECKED,limitsStale,holidays,GOAL,screen,monthTotal,pace,ics,daysUntil,merge,srLimit,incomeCheck,CHANGES,reportBy,nextBusiness};
 if(typeof module!=='undefined')module.exports=api;else g.KYS=api;
 })(this);

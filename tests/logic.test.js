@@ -1,5 +1,9 @@
 const K=require('../logic.js');let n=0;const ok=(c,m)=>{if(!c){console.error('FAIL',m);process.exitCode=1}else n++};
-ok(K.screen({age:'18-64'}).applies===true,'applies');ok(K.screen({age:'18-64',pregnant:'yes'}).applies===false,'pregnant');ok(K.screen({}).applies===null,'blank');
+const all=o=>Object.assign(Object.fromEntries(K.QKEYS.map(k=>[k,'no'])),{age:'18-64',place:'other'},o);
+ok(K.screen(all()).applies===true&&!K.screen(all()).cautious,'applies');ok(K.screen(all({pregnant:'yes'})).applies===false,'pregnant');
+ok(K.screen({age:'18-64'}).applies===null&&K.screen({age:'18-64'}).missing.length===10,'age alone -> no result');
+ok(K.screen({age:'18-64',pregnant:'yes'}).applies===null,'partial with exemption still needs all answers');
+ok(K.screen(all({unfit:'unsure'})).applies===true&&K.screen(all({unfit:'unsure'})).cautious,'not sure -> cautious');ok(K.screen({}).applies===null,'blank');
 ok(K.monthTotal([{date:'2026-10-01',hours:5},{date:'2026-09-30',hours:9}],'2026-10')===5,'monthTotal');ok(K.pace(30,2026,10,27).behind,'behind');
 ok(K.ics([{id:'a',title:'x',date:'2026-12-31'}]).includes('DTEND;VALUE=DATE:20270101'),'ics');
 ok(K.srLimit(1)===1729&&K.srLimit(4)===3575&&K.srLimit(10)===6037+2*616,'srLimit');
@@ -11,4 +15,12 @@ ok(K.reportBy('hours80','2026-12-15','sr').date==='2027-01-11','jan10 is Sunday 
 ok(K.nextBusiness('2026-10-10')==='2026-10-12','Sat10 -> Mon12');ok(K.nextBusiness('2026-11-26')==='2026-11-30','Thanksgiving+Fri -> Mon');
 const m=K.merge({logs:[],rem:[{title:'a',date:'2026-11-01'}],changes:[{id:'c1',reported:false}]},{logs:[],rem:[{title:'a',date:'2026-11-01',done:true}],changes:[{id:'c1',reported:true,conf:'X9'},{id:'c2'}]});
 ok(m.changes.length===2&&m.changes[0].reported&&m.changes[0].conf==='X9'&&m.rem[0].done,'merge changes');
+ok(K.reportBy('pay','2026-10-20','sr').required===null&&K.reportBy('pay','2026-10-20','sr').unknown,'blank income -> unknown, not "not required"');
+ok(K.reportBy('pay','2026-11-06','cr').date==='2026-11-16'&&/first paycheck/.test(K.triggerLabel('pay')),'pay counts from first paycheck');
+ok(K.nextBusiness('2026-07-03')==='2026-07-06','Jul 4 2026 Sat -> observed Fri Jul 3');ok(K.holidays(2027).includes('2027-07-05'),'Jul 4 2027 Sun -> Mon');
+const u=K.under80Months([{date:'2026-09-03',hours:40},{date:'2026-08-03',hours:90},{date:'2026-10-02',hours:1}],'2026-10-27');
+ok(u.length===1&&u[0]==='2026-09'&&K.under80Reminder('2026-09').date==='2026-10-12'&&K.under80Reminder('2026-09').id==='h80-2026-09','under-80 reminder by 10th (Oct 10 Sat -> Mon 12)');
+const t=K.merge({logs:[],rem:[],changes:[],del:{c1:5,r1:5,l1:5}},{logs:[{id:'l1',date:'2026-10-01',type:'work',hours:3}],rem:[{id:'r1',title:'a',date:'2026-11-01'},{id:'r2',title:'b',date:'2026-11-02',changeId:'c1'}],changes:[{id:'c1',kind:'pay'}],del:{x:1}});
+ok(!t.logs.length&&!t.rem.length&&!t.changes.length&&t.del.x===1,'tombstones block resurrection');
+ok(K.limitsStale('2027-10-01')&&!K.limitsStale('2026-12-01'),'limits stale each October');
 console.log(n+' logic tests passed');

@@ -1,37 +1,45 @@
-const {chromium}=require('/node_modules/playwright-core');
-(async()=>{const ctx=await chromium.launchPersistentContext('/tmp/hct/kys',{executablePath:'/opt/google/chrome/chrome',headless:true,acceptDownloads:true,viewport:{width:390,height:844}});
+const {chromium}=require('/node_modules/playwright-core');const fs=require('fs');
+const U=process.env.URL||'http://127.0.0.1:18432/',O='/workspace/kys-fix/';
+(async()=>{const ctx=await chromium.launchPersistentContext('/tmp/kysfix',{executablePath:'/opt/google/chrome/chrome',headless:true,acceptDownloads:true,viewport:{width:390,height:844}});
+// block CDNs to prove nothing depends on them
+await ctx.route(/cdn\.jsdelivr\.net|unpkg\.com|cdnjs/,r=>r.abort());
 const p=ctx.pages()[0]||await ctx.newPage();const errs=[];p.on('console',m=>m.type()==='error'&&errs.push(m.text()));p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
-const U=process.env.URL||'http://127.0.0.1:18432/';await p.goto(U);await p.evaluate(()=>localStorage.clear());await p.reload();
-const pick=async(o)=>{for(const[k,v] of Object.entries(o))await p.check(`input[name=${k}][value="${v}"]`);await p.click('#scr button[type=submit]');return (await p.textContent('#result')).slice(0,90);};
-console.log('A',await pick({age:'18-64',child14:'no',pregnant:'no',place:'other'}));
-await p.click('text=Start over');console.log('B',await pick({age:'18-64',pregnant:'yes'}));
-await p.click('text=Start over');console.log('C',await pick({age:'65plus'}));
-await p.click('text=Start over');console.log('D',await pick({age:'18-64',place:'excluded'}));
-await p.click('text=Start over');await p.click('#scr button[type=submit]');console.log('E',await p.textContent('#result'));
-await p.screenshot({path:'/workspace/kys-check.png',fullPage:true});
-await p.click('nav >> text=Hours');await p.fill('#hh','6');await p.fill('#hp','<img src=x onerror=alert(1)>');await p.click('#addh button');
-await p.fill('#hh','4.5');await p.selectOption('#ht','volunteer');await p.click('#addh button');
-console.log('tot',await p.textContent('#tot'),'behind',!!await p.$('#behind'),'xss',await p.$('img[src=x]'));
-await p.screenshot({path:'/workspace/kys-hours.png',fullPage:true});
-await p.click('nav >> text=Dates');await p.fill('#rd','2026-11-05');await p.click('#addr button');await p.selectOption('#rk','Semi-annual report due');await p.fill('#rd','2027-04-30');await p.click('#addr button');
-const [dl]=await Promise.all([p.waitForEvent('download'),p.click('#icsb')]);const fs=require('fs');await dl.saveAs('/tmp/kys.ics');const ics=fs.readFileSync('/tmp/kys.ics','utf8');console.log('ics events',(ics.match(/BEGIN:VEVENT/g)||[]).length,ics.includes('DTSTART;VALUE=DATE:20261105'),'alert',(await p.textContent('main')).includes('due in 9 days'));
-await p.screenshot({path:'/workspace/kys-dates.png',fullPage:true});
-await p.click('nav >> text=Changes');await p.check('input[name=rp][value=sr]');await p.selectOption('#isz','1');await p.fill('#igr','1800');await p.press('#igr','Tab');
-console.log('income over',(await p.textContent('#incres')).includes('over'));
-await p.click('#ch-pay summary');await p.fill('#cd-pay','2026-10-20');await p.fill('#cn-pay','<b>raise</b>');await p.click('#ch-pay >> text=Log this change');
-await p.click('#ch-address summary');await p.fill('#cd-address','2026-10-25');await p.click('#ch-address >> text=Log this change');
-let st=await p.evaluate(()=>JSON.parse(localStorage.kys));console.log('changes',st.changes.length,'payBy',st.changes[0].reportBy,'req',st.changes[0].required,'addrReq',st.changes[1].required,'rems',st.rem.length,'xss',!!await p.$('#mych b:text("raise")'));
-console.log('upcoming has',(await p.textContent('#upcoming')).includes('Report change: Change in pay'));
-await p.locator('#mych .row',{hasText:'Change in pay'}).locator('input[type=checkbox]').check();const pr=p.locator('#mych .row',{hasText:'Change in pay'}).locator('input[placeholder="Confirmation number"]');await pr.fill('MB-12345');await pr.press('Tab');
-st=await p.evaluate(()=>JSON.parse(localStorage.kys));const pc=st.changes.find(c=>c.kind==='pay');console.log('addrStillOpen',!st.changes.find(c=>c.kind==='address').reported,'reported',pc.reported,'conf',pc.conf,'remDone',st.rem.find(r=>r.changeId===pc.id).done);
-await p.screenshot({path:'/workspace/kys-changes.png',fullPage:true});await p.click('nav >> text=Check');await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:'/workspace/kys-main.png'});
-await p.click('nav >> text=Sync');const link=await p.inputValue('#sl');console.log('qr',!!await p.$('#qr svg'));
-const [bk]=await Promise.all([p.waitForEvent('download'),p.click('#bk')]);await bk.saveAs('/tmp/kys-bk.json');
-await p.screenshot({path:'/workspace/kys-sync.png',fullPage:true});
-const p2=await ctx.browser()?null:null;
-// fresh origin for round trip: new context
-const ctx2=await chromium.launchPersistentContext('/tmp/hct/kys2',{executablePath:'/opt/google/chrome/chrome',headless:true});const q=ctx2.pages()[0]||await ctx2.newPage();q.on('pageerror',e=>errs.push(e.message));q.on('console',m=>m.type()==='error'&&errs.push(m.text()));
-await q.goto(U);await q.evaluate(()=>localStorage.clear());await q.goto(link.replace(/^http:\/\/[^/]+\//,U));await q.click('#mg');const d=await q.evaluate(()=>JSON.parse(localStorage.kys));console.log('sync logs',d.logs.length,'rem',d.rem.length,'changes',d.changes.length,'conf',d.changes.find(c=>c.kind==='pay').conf,'reporter',d.reporter,'inc',d.inc&&d.inc.gross,'hash',await q.evaluate(()=>location.hash));
-await q.goto(link.replace(/^http:\/\/[^/]+\//,U));await q.click('#mg');console.log('dup-merge logs',(await q.evaluate(()=>JSON.parse(localStorage.kys))).logs.length);
-await q.click('nav >> text=Sync');await q.setInputFiles('input[type=file]','/tmp/kys-bk.json');await q.click('#rp');const bb=await q.evaluate(()=>JSON.parse(localStorage.kys));console.log('backup replace',bb.logs.length,'changes',bb.changes.length,'reporter',bb.reporter);
-console.log('errors',JSON.stringify(errs));await ctx.close();await ctx2.close();})();
+const log=(...a)=>console.log(...a);
+// 1. old v2 data loads + migrates
+await p.goto(U);await p.evaluate(()=>{localStorage.clear();localStorage.setItem('kys',JSON.stringify({logs:[{id:'o1',date:'2026-09-02',type:'work',hours:20}],rem:[{id:'r0',title:'Renewal (redetermination) due',date:'2026-12-01'}],ans:{age:'18-64',_done:1},changes:[],reporter:'sr',inc:{size:1,gross:''},tab:'sync'}))});await p.reload();
+let st=await p.evaluate(()=>JSON.parse(localStorage.kys));log('old data kept',st.logs.length===1&&st.rem.some(r=>r.id==='r0'),'tab migrated',st.tab,'auto under-80 Sept reminder',st.rem.some(r=>r.id==='h80-2026-09'));
+log('welcome shows',!!await p.$('#welcome'),'backup reminder',!!await p.$('#bkrem'));
+const nav=await p.evaluate(()=>{const n=document.querySelector('nav');return{sw:n.scrollWidth,cw:n.clientWidth,doc:document.documentElement.scrollWidth,btns:[...n.querySelectorAll('button')].map(b=>b.getBoundingClientRect().right<=390)}});log('nav',JSON.stringify(nav));
+await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:O+'1-welcome.png'});
+await p.click('text=Start with step 1');
+// 2. screener gating: old partial answer (age only) must not give result
+log('age-only result',(await p.textContent('#result')).slice(0,40),'missing marked',await p.$$eval('.miss',e=>e.length));
+await p.screenshot({path:O+'2-screener-incomplete.png',fullPage:true});
+const all={age:'18-64',child14:'no',pregnant:'no',unfit:'unsure',caregiver:'no',student:'no',treatment:'no',ui:'no',work30:'no',tribe:'no',place:'other'};
+for(const[k,v] of Object.entries(all))await p.check(`input[name=${k}][value="${v}"]`);await p.click('#scr button[type=submit]');
+log('all answered (1 not sure)',(await p.textContent('#result')).slice(0,60));await p.screenshot({path:O+'3-screener-cautious.png',fullPage:true});
+// 3. hours under-80 offer
+await p.click('nav >> text=Hours');await p.fill('#hh','6');await p.click('#addh button');log('u80 offer',(await p.textContent('#u80')).trim().slice(0,60));
+await p.click('#u80');st=await p.evaluate(()=>JSON.parse(localStorage.kys));log('u80 added',st.rem.filter(r=>r.id.startsWith('h80-')).map(r=>r.id+'>'+r.date).join(','));
+await p.screenshot({path:O+'4-hours.png',fullPage:true});
+// 4. deadlines: pay change w/ blank income -> check income
+await p.click('nav >> text=Deadlines');await p.click('#ch-pay summary');log('pay label',await p.textContent('label[for=cd-pay]'),'inline income ask',!!await p.$('#ci-pay'));
+await p.fill('#cd-pay','2026-11-06');await p.click('#ch-pay >> text=Log this change');st=await p.evaluate(()=>JSON.parse(localStorage.kys));const pc=st.changes.find(c=>c.kind==='pay');log('blank-income pay change required',pc.required,'by',pc.reportBy,'title',st.rem.find(r=>r.changeId===pc.id).title);
+log('rules note',(await p.textContent('#rulesnote')).trim());
+await p.screenshot({path:O+'5-deadlines.png',fullPage:true});
+// delete reminder linked to change -> both removed + tombstoned
+await p.locator('.row',{hasText:'Check income, maybe report'}).first().locator('button[aria-label="Delete reminder"]').click();
+st=await p.evaluate(()=>JSON.parse(localStorage.kys));log('linked delete: changes',st.changes.length,'tombs',Object.keys(st.del).length);
+// 5. More tab: sync with CDN blocked
+await p.click('nav >> text=More');log('qr (CDN blocked)',!!await p.$('#qr svg'),'LZ',await p.evaluate(()=>typeof LZString));const link=await p.inputValue('#sl');
+const [bk]=await Promise.all([p.waitForEvent('download'),p.click('#bk')]);await bk.saveAs('/tmp/kysfix-bk.json');
+await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:O+'6-more-sync.png',fullPage:true});
+const sw=await p.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();return !!r});log('sw registered',sw,'manifest',await p.evaluate(()=>fetch('manifest.webmanifest').then(r=>r.ok)));
+// 6. resurrection: second device has the deleted change; merging it back must not resurrect
+const ctx2=await chromium.launchPersistentContext('/tmp/kysfix2',{executablePath:'/opt/google/chrome/chrome',headless:true,viewport:{width:390,height:844}});await ctx2.route(/cdn\.jsdelivr\.net/,r=>r.abort());
+const q=ctx2.pages()[0]||await ctx2.newPage();q.on('pageerror',e=>errs.push(e.message));q.on('dialog',d=>d.accept());
+await q.goto(U);await q.evaluate(c=>{localStorage.clear();localStorage.setItem('kys',JSON.stringify({logs:[],rem:[{id:'rx',title:'Report change: Change in pay or hours',date:'2026-11-16',changeId:c.id}],changes:[c],ans:{},welcomed:true}))},pc);await q.reload();
+await q.goto(link.replace(/^http:\/\/[^/]+\//,U));await q.reload();await q.click('#mg');const d2=await q.evaluate(()=>JSON.parse(localStorage.kys));log('device2 after merge: deleted change resurrected?',d2.changes.some(c=>c.id===pc.id),'logs',d2.logs.length);
+// and device2 -> device1 back
+await q.click('nav >> text=More');const link2=await q.inputValue('#sl');await p.goto(link2.replace(/^http:\/\/[^/]+\//,U));await p.reload();await p.click('#mg');st=await p.evaluate(()=>JSON.parse(localStorage.kys));log('device1 after back-merge resurrected?',st.changes.some(c=>c.id===pc.id)||st.rem.some(r=>r.id==='rx'));
+log('errors',JSON.stringify(errs));await ctx.close();await ctx2.close();})();
